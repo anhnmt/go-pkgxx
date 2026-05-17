@@ -4,6 +4,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Ensure bcryptHasher implements Hasher at compile time.
+var _ Hasher = (*bcryptHasher)(nil)
+
 // bcryptHasher is the bcrypt implementation of Hasher.
 type bcryptHasher struct {
 	cost      int
@@ -32,6 +35,11 @@ func NewBcryptHasher(opts ...Option) Hasher {
 	}
 }
 
+// Algorithm returns the hashing algorithm identifier.
+func (h *bcryptHasher) Algorithm() Algorithm {
+	return AlgorithmBcrypt
+}
+
 // Hash validates then generates a bcrypt hash from the given plain-text password.
 func (h *bcryptHasher) Hash(password string) (string, error) {
 	if err := validatePassword(password, h.minLength, h.maxLength); err != nil {
@@ -47,10 +55,11 @@ func (h *bcryptHasher) Hash(password string) (string, error) {
 }
 
 // Compare checks whether the plain-text password matches the given bcrypt hash.
-// Always runs bcrypt.CompareHashAndPassword to avoid timing attacks on invalid input.
+// Returns false (not an error) on algorithm mismatch to keep the interface consistent.
 func (h *bcryptHasher) Compare(password, hash string) bool {
-	// Always run comparison even if password is invalid
-	// to prevent timing-based detection of valid vs invalid passwords.
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-	return err == nil
+	if IdentifyAlgorithm(hash) != AlgorithmBcrypt {
+		return false
+	}
+
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }

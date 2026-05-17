@@ -4,6 +4,9 @@ import (
 	"github.com/matthewhartstonge/argon2"
 )
 
+// Ensure argon2Hasher implements Hasher at compile time.
+var _ Hasher = (*argon2Hasher)(nil)
+
 // argon2Hasher is the Argon2id implementation of Hasher.
 type argon2Hasher struct {
 	cfg       argon2.Config
@@ -12,7 +15,7 @@ type argon2Hasher struct {
 }
 
 // NewArgon2Hasher creates a new Argon2id Hasher with optional configuration.
-// Defaults to argon2.DefaultConfig() which follows RFC recommendations.
+// Defaults follow RFC recommendations via argon2.DefaultConfig().
 func NewArgon2Hasher(opts ...Option) Hasher {
 	cfg := defaultConfig()
 	cfg.Memory = 64 * 1024
@@ -37,6 +40,11 @@ func NewArgon2Hasher(opts ...Option) Hasher {
 	}
 }
 
+// Algorithm returns the hashing algorithm identifier.
+func (h *argon2Hasher) Algorithm() Algorithm {
+	return AlgorithmArgon2
+}
+
 // Hash validates then generates an Argon2id hash from the given plain-text password.
 // Salt is automatically generated. Output follows the PHC string format.
 func (h *argon2Hasher) Hash(password string) (string, error) {
@@ -53,8 +61,12 @@ func (h *argon2Hasher) Hash(password string) (string, error) {
 }
 
 // Compare checks whether the plain-text password matches the given Argon2id hash.
-// Uses constant-time comparison and SecureZeroMemory to wipe password from RAM.
+// Returns false (not an error) on algorithm mismatch to keep the interface consistent.
 func (h *argon2Hasher) Compare(password, hash string) bool {
+	if IdentifyAlgorithm(hash) != AlgorithmArgon2 {
+		return false
+	}
+
 	ok, err := argon2.VerifyEncoded([]byte(password), []byte(hash))
 	if err != nil {
 		return false
