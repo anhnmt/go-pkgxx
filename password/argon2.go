@@ -1,6 +1,8 @@
 package password
 
 import (
+	"strings"
+
 	"github.com/matthewhartstonge/argon2"
 )
 
@@ -34,6 +36,7 @@ func NewArgon2Hasher(opts ...Option) Hasher {
 			SaltLength:  16,
 			HashLength:  32,
 			Mode:        argon2.ModeArgon2id,
+			Version:     argon2.Version13,
 		},
 		minLength: cfg.MinLength,
 		maxLength: cfg.MaxLength,
@@ -57,7 +60,9 @@ func (h *argon2Hasher) Hash(password string) (string, error) {
 		return "", err
 	}
 
-	return string(encoded), nil
+	// HashEncoded may append a trailing newline; trim it so the stored string
+	// round-trips cleanly through VerifyEncoded.
+	return strings.TrimSpace(string(encoded)), nil
 }
 
 // Compare checks whether the plain-text password matches the given Argon2id hash.
@@ -67,7 +72,7 @@ func (h *argon2Hasher) Compare(password, hash string) bool {
 		return false
 	}
 
-	ok, err := argon2.VerifyEncoded([]byte(password), []byte(hash))
+	ok, err := argon2.VerifyEncoded([]byte(password), []byte(strings.TrimSpace(hash)))
 	if err != nil {
 		return false
 	}

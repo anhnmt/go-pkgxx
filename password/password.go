@@ -99,7 +99,7 @@ func validatePassword(password string, min, max int) error {
 // IdentifyAlgorithm detects the algorithm from the hash prefix.
 func IdentifyAlgorithm(hash string) Algorithm {
 	switch {
-	case len(hash) > 4 && hash[:4] == "$2a$" || hash[:4] == "$2b$":
+	case len(hash) > 4 && (hash[:4] == "$2a$" || hash[:4] == "$2b$"):
 		return AlgorithmBcrypt
 	case len(hash) > 9 && hash[:9] == "$argon2id":
 		return AlgorithmArgon2
