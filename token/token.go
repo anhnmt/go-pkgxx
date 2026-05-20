@@ -23,12 +23,12 @@ var (
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
-// TokenMaker is the contract for creating signed tokens.
+// TokenMaker creates signed tokens.
 type TokenMaker interface {
 	CreateToken(now time.Time, payload TokenPayload) (string, error)
 }
 
-// TokenParser is the contract for validating and parsing tokens.
+// TokenParser validates and parses tokens back into a payload.
 // Kept separate so read-only services only need the parser, not the signing key.
 type TokenParser interface {
 	ParseToken(tokenStr string) (*TokenPayload, error)
@@ -41,14 +41,14 @@ type TokenParser interface {
 // reachable via SessionID.
 type TokenPayload struct {
 	UserID       uuid.UUID
-	SessionID    uuid.UUID // one session per device; use to lookup device info
+	SessionID    uuid.UUID // one session per device
 	TokenID      uuid.UUID // jti — used for per-token blacklisting
 	Type         TokenType
-	TokenVersion int32         // bump to invalidate all tokens for a user at once
+	TokenVersion int32         // bump to invalidate all tokens for a user (force logout all)
 	TTL          time.Duration // 0 → use maker default for the token type
 }
 
-// ── Types & constants ─────────────────────────────────────────────────────────
+// ── TokenType ─────────────────────────────────────────────────────────────────
 
 // TokenType distinguishes access tokens from refresh tokens.
 type TokenType string

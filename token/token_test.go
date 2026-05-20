@@ -19,12 +19,12 @@ func TestTokenType_Values(t *testing.T) {
 		want      string
 	}{
 		{
-			name:      "AccessToken value is access",
+			name:      "AccessToken string value is access",
 			tokenType: token.AccessToken,
 			want:      "access",
 		},
 		{
-			name:      "RefreshToken value is refresh",
+			name:      "RefreshToken string value is refresh",
 			tokenType: token.RefreshToken,
 			want:      "refresh",
 		},
@@ -52,7 +52,7 @@ func TestTokenType_AreDistinct(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.a == tt.b {
-				t.Errorf("expected %v != %v", tt.a, tt.b)
+				t.Errorf("%v == %v, want distinct values", tt.a, tt.b)
 			}
 		})
 	}
@@ -72,7 +72,7 @@ func TestSentinelErrors_NotNil(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.err == nil {
-				t.Errorf("%v must not be nil", tt.err)
+				t.Errorf("expected non-nil error, got nil")
 			}
 		})
 	}
@@ -85,17 +85,17 @@ func TestSentinelErrors_Messages(t *testing.T) {
 		want string
 	}{
 		{
-			name: "ErrInvalidToken message",
+			name: "ErrInvalidToken has correct message",
 			err:  token.ErrInvalidToken,
 			want: "token: invalid token",
 		},
 		{
-			name: "ErrExpiredToken message",
+			name: "ErrExpiredToken has correct message",
 			err:  token.ErrExpiredToken,
 			want: "token: token has expired",
 		},
 		{
-			name: "ErrRevokedToken message",
+			name: "ErrRevokedToken has correct message",
 			err:  token.ErrRevokedToken,
 			want: "token: token has been revoked",
 		},
@@ -160,31 +160,19 @@ func TestSentinelErrors_MatchThemselves(t *testing.T) {
 	}
 }
 
-func TestSentinelErrors_CanBeWrappedAndUnwrapped(t *testing.T) {
+func TestSentinelErrors_CanBeWrapped(t *testing.T) {
 	tests := []struct {
-		name    string
-		wrapped error
-		target  error
+		name   string
+		target error
 	}{
-		{
-			name:    "wrapped ErrExpiredToken is unwrappable",
-			wrapped: errors.Join(token.ErrExpiredToken, errors.New("extra context")),
-			target:  token.ErrExpiredToken,
-		},
-		{
-			name:    "wrapped ErrInvalidToken is unwrappable",
-			wrapped: errors.Join(token.ErrInvalidToken, errors.New("extra context")),
-			target:  token.ErrInvalidToken,
-		},
-		{
-			name:    "wrapped ErrRevokedToken is unwrappable",
-			wrapped: errors.Join(token.ErrRevokedToken, errors.New("extra context")),
-			target:  token.ErrRevokedToken,
-		},
+		{name: "ErrInvalidToken survives wrapping", target: token.ErrInvalidToken},
+		{name: "ErrExpiredToken survives wrapping", target: token.ErrExpiredToken},
+		{name: "ErrRevokedToken survives wrapping", target: token.ErrRevokedToken},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if !errors.Is(tt.wrapped, tt.target) {
+			wrapped := errors.Join(tt.target, errors.New("extra context"))
+			if !errors.Is(wrapped, tt.target) {
 				t.Errorf("errors.Is(wrapped, %v) = false, want true", tt.target)
 			}
 		})
@@ -217,10 +205,8 @@ func TestTokenPayload_ZeroValue(t *testing.T) {
 	}
 }
 
-func TestTokenPayload_FieldsAreAssignable(t *testing.T) {
-	uid := uuid.New()
-	sid := uuid.New()
-	tid := uuid.New()
+func TestTokenPayload_Fields(t *testing.T) {
+	uid, sid, tid := uuid.New(), uuid.New(), uuid.New()
 
 	tests := []struct {
 		name    string
@@ -272,33 +258,28 @@ func TestTokenPayload_FieldsAreAssignable(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:    "AccessToken type is stored correctly",
+			payload: token.TokenPayload{Type: token.AccessToken},
+			check: func(t *testing.T, p token.TokenPayload) {
+				if p.Type != token.AccessToken {
+					t.Errorf("Type = %v, want %v", p.Type, token.AccessToken)
+				}
+			},
+		},
+		{
+			name:    "RefreshToken type is stored correctly",
+			payload: token.TokenPayload{Type: token.RefreshToken},
+			check: func(t *testing.T, p token.TokenPayload) {
+				if p.Type != token.RefreshToken {
+					t.Errorf("Type = %v, want %v", p.Type, token.RefreshToken)
+				}
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.check(t, tt.payload)
-		})
-	}
-}
-
-// ── Interface compliance ──────────────────────────────────────────────────────
-
-func TestJWTMaker_SatisfiesInterfaces(t *testing.T) {
-	tests := []struct {
-		name string
-		run  func(t *testing.T)
-	}{
-		{
-			name: "JWTMaker satisfies TokenMaker",
-			run:  func(t *testing.T) { var _ token.TokenMaker = mustMaker(t) },
-		},
-		{
-			name: "JWTMaker satisfies TokenParser",
-			run:  func(t *testing.T) { var _ token.TokenParser = mustMaker(t) },
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.run(t)
 		})
 	}
 }

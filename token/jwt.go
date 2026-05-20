@@ -1,6 +1,7 @@
 package token
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -9,7 +10,23 @@ import (
 	"github.com/google/uuid"
 )
 
-// Default TTL values.
+// ── Context helpers ───────────────────────────────────────────────────────────
+
+type contextKey struct{}
+
+// NewContext stores a TokenPayload in the context.
+func NewContext(ctx context.Context, payload *TokenPayload) context.Context {
+	return context.WithValue(ctx, contextKey{}, payload)
+}
+
+// FromContext retrieves a TokenPayload from the context.
+func FromContext(ctx context.Context) (*TokenPayload, bool) {
+	payload, ok := ctx.Value(contextKey{}).(*TokenPayload)
+	return payload, ok
+}
+
+// ── Defaults ──────────────────────────────────────────────────────────────────
+
 const (
 	defaultAccessTokenTTL  = 15 * time.Minute
 	defaultRefreshTokenTTL = 7 * 24 * time.Hour
@@ -44,7 +61,7 @@ func WithRefreshTokenTTL(d time.Duration) Option {
 
 // ── JWTMaker ──────────────────────────────────────────────────────────────────
 
-// JWTMaker implements TokenMaker using HMAC-signed JWTs.
+// JWTMaker implements TokenMaker and TokenParser using HMAC-signed JWTs.
 type JWTMaker struct {
 	secretKey       []byte
 	accessTokenTTL  time.Duration
@@ -88,7 +105,9 @@ func (m *JWTMaker) RefreshTokenTTL() time.Duration { return m.refreshTokenTTL }
 
 // ── Claims ────────────────────────────────────────────────────────────────────
 
-// jwtClaims holds the standard JWT claims plus our custom token payload.
+// jwtClaims holds standard JWT fields plus our custom payload.
+// UUID fields must NOT use omitempty — a zero UUID is still a valid value
+// and omitting it would silently lose data on round-trip.
 type jwtClaims struct {
 	jwt.RegisteredClaims
 

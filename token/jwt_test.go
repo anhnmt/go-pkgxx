@@ -1,6 +1,7 @@
 package token_test
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -82,13 +83,13 @@ func TestNewJWTMaker_SecretValidation(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "short secret is rejected",
+			name:    "8 byte secret is rejected",
 			secret:  "tooshort",
 			wantErr: true,
 		},
 		{
 			name:    "31 byte secret is rejected",
-			secret:  "exactly-31-bytes-of-padding-her", // 31 bytes
+			secret:  "exactly-31-bytes-of-padding-her",
 			wantErr: true,
 		},
 		{
@@ -257,12 +258,12 @@ func TestCreateToken_Output(t *testing.T) {
 		wantEmpty bool
 	}{
 		{
-			name:      "access token is non-empty",
+			name:      "access token produces non-empty string",
 			payload:   accessPayload(),
 			wantEmpty: false,
 		},
 		{
-			name:      "refresh token is non-empty",
+			name:      "refresh token produces non-empty string",
 			payload:   refreshPayload(),
 			wantEmpty: false,
 		},
@@ -333,7 +334,7 @@ func TestCreateToken_TTLResolution(t *testing.T) {
 	}
 }
 
-// ── ParseToken — happy path ───────────────────────────────────────────────────
+// ── ParseToken — round-trip ───────────────────────────────────────────────────
 
 func TestParseToken_RoundTrip(t *testing.T) {
 	m := mustMaker(t)
@@ -378,9 +379,9 @@ func TestParseToken_RoundTrip(t *testing.T) {
 	}
 }
 
-// ── ParseToken — error cases ──────────────────────────────────────────────────
+// ── ParseToken — errors ───────────────────────────────────────────────────────
 
-func TestParseToken_InvalidInputs(t *testing.T) {
+func TestParseToken_Errors(t *testing.T) {
 	m := mustMaker(t)
 
 	tests := []struct {
@@ -389,22 +390,22 @@ func TestParseToken_InvalidInputs(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name:    "empty string",
+			name:    "empty string returns ErrInvalidToken",
 			token:   "",
 			wantErr: token.ErrInvalidToken,
 		},
 		{
-			name:    "random garbage",
+			name:    "random garbage returns ErrInvalidToken",
 			token:   "not-a-jwt-at-all",
 			wantErr: token.ErrInvalidToken,
 		},
 		{
-			name:    "only two parts",
+			name:    "two-part token returns ErrInvalidToken",
 			token:   "header.payload",
 			wantErr: token.ErrInvalidToken,
 		},
 		{
-			name: "tampered signature",
+			name: "tampered signature returns ErrInvalidToken",
 			token: func() string {
 				s := mustSign(t, m, accessPayload())
 				return s[:len(s)-4] + "XXXX"
@@ -412,7 +413,7 @@ func TestParseToken_InvalidInputs(t *testing.T) {
 			wantErr: token.ErrInvalidToken,
 		},
 		{
-			name: "tampered payload",
+			name: "tampered payload returns ErrInvalidToken",
 			token: func() string {
 				s := mustSign(t, m, accessPayload())
 				parts := strings.Split(s, ".")
@@ -422,7 +423,7 @@ func TestParseToken_InvalidInputs(t *testing.T) {
 			wantErr: token.ErrInvalidToken,
 		},
 		{
-			name: "wrong secret",
+			name: "token signed with different secret returns ErrInvalidToken",
 			token: func() string {
 				other, _ := token.NewJWTMaker("another-completely-different-secret-key!")
 				return mustSign(t, other, accessPayload())
@@ -431,12 +432,12 @@ func TestParseToken_InvalidInputs(t *testing.T) {
 		},
 		{
 			// Classic JWT attack: alg=none bypasses signature verification.
-			name:    "alg none attack is rejected",
+			name:    "alg:none attack is rejected with ErrInvalidToken",
 			token:   "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJ1aWQiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDAifQ.",
 			wantErr: token.ErrInvalidToken,
 		},
 		{
-			name: "not yet valid (future nbf)",
+			name: "future nbf returns ErrInvalidToken",
 			token: func() string {
 				s, _ := m.CreateToken(time.Now().Add(10*time.Minute), accessPayload())
 				return s
@@ -444,11 +445,10 @@ func TestParseToken_InvalidInputs(t *testing.T) {
 			wantErr: token.ErrInvalidToken,
 		},
 		{
-			name: "expired token",
+			name: "expired token returns ErrExpiredToken",
 			token: func() string {
 				p := accessPayload()
 				p.TTL = time.Second
-				// issued 1 hour ago → clearly expired
 				s, _ := m.CreateToken(time.Now().Add(-time.Hour), p)
 				return s
 			}(),
@@ -461,6 +461,93 @@ func TestParseToken_InvalidInputs(t *testing.T) {
 			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("ParseToken() error = %v, want %v", err, tt.wantErr)
 			}
+		})
+	}
+}
+
+// ── Context helpers ───────────────────────────────────────────────────────────
+
+func TestContext_NewAndFrom(t *testing.T) {
+	payload := accessPayload()
+
+	tests := []struct {
+		name    string
+		ctx     context.Context
+		wantOk  bool
+		wantNil bool
+	}{
+		{
+			name:    "payload stored in context is retrievable",
+			ctx:     token.NewContext(context.Background(), &payload),
+			wantOk:  true,
+			wantNil: false,
+		},
+		{
+			name:    "nil payload stored in context returns ok=false",
+			ctx:     token.NewContext(context.Background(), nil),
+			wantOk:  false,
+			wantNil: true,
+		},
+		{
+			name:    "empty context returns ok=false",
+			ctx:     context.Background(),
+			wantOk:  false,
+			wantNil: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := token.FromContext(tt.ctx)
+			if ok != tt.wantOk {
+				t.Errorf("FromContext() ok = %v, want %v", ok, tt.wantOk)
+			}
+			if (got == nil) != tt.wantNil {
+				t.Errorf("FromContext() nil = %v, want %v", got == nil, tt.wantNil)
+			}
+		})
+	}
+}
+
+func TestContext_PayloadIntegrity(t *testing.T) {
+	want := accessPayload()
+	ctx := token.NewContext(context.Background(), &want)
+
+	tests := []struct {
+		name  string
+		check func(t *testing.T, got *token.TokenPayload)
+	}{
+		{
+			name: "UserID is preserved through context",
+			check: func(t *testing.T, got *token.TokenPayload) {
+				if got.UserID != want.UserID {
+					t.Errorf("UserID = %v, want %v", got.UserID, want.UserID)
+				}
+			},
+		},
+		{
+			name: "SessionID is preserved through context",
+			check: func(t *testing.T, got *token.TokenPayload) {
+				if got.SessionID != want.SessionID {
+					t.Errorf("SessionID = %v, want %v", got.SessionID, want.SessionID)
+				}
+			},
+		},
+		{
+			name: "TokenType is preserved through context",
+			check: func(t *testing.T, got *token.TokenPayload) {
+				if got.Type != want.Type {
+					t.Errorf("Type = %v, want %v", got.Type, want.Type)
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := token.FromContext(ctx)
+			if !ok {
+				t.Fatal("FromContext() ok = false, want true")
+			}
+			tt.check(t, got)
 		})
 	}
 }
