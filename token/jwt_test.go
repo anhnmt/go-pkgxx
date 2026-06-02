@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/anhnmt/go-authxx/token"
+	"github.com/anhnmt/go-pkgxx/token"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
