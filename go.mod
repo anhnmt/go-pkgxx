@@ -6,7 +6,7 @@ require (
 	github.com/casbin/casbin/v3 v3.10.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.9.2
+	github.com/jackc/pgx/v5 v5.10.0
 	github.com/matthewhartstonge/argon2 v1.5.4
 	github.com/noho-digital/casbin-pgx-adapter v1.2.1
 	github.com/rs/zerolog v1.35.1
