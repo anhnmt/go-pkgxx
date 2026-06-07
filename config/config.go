@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 )
 
@@ -12,9 +13,10 @@ import (
 type Option func(*options)
 
 type options struct {
-	envReplacer *strings.Replacer
-	envPrefix   string
-	validator   func(any) error
+	envReplacer    *strings.Replacer
+	envPrefix      string
+	validator      func(any) error
+	decoderOptions []viper.DecoderConfigOption
 }
 
 // WithEnvKeyReplacer overrides the default key replacer ("." -> "_").
@@ -30,6 +32,20 @@ func WithEnvPrefix(prefix string) Option {
 // WithValidator sets a validation function called after unmarshalling.
 func WithValidator(fn func(any) error) Option {
 	return func(o *options) { o.validator = fn }
+}
+
+// WithDecoderOption appends mapstructure decoder options.
+func WithDecoderOption(fn ...viper.DecoderConfigOption) Option {
+	return func(o *options) {
+		o.decoderOptions = append(o.decoderOptions, fn...)
+	}
+}
+
+// WithJSONTag makes Viper use json struct tags (snake_case proto fields).
+func WithJSONTag() Option {
+	return WithDecoderOption(func(c *mapstructure.DecoderConfig) {
+		c.TagName = "json"
+	})
 }
 
 // New loads the config file into cfg, applying any provided options.
@@ -54,7 +70,7 @@ func New(file string, cfg any, opts ...Option) error {
 		return fmt.Errorf("read config: %w", err)
 	}
 
-	if err := viper.Unmarshal(cfg); err != nil {
+	if err := viper.Unmarshal(cfg, o.decoderOptions...); err != nil {
 		return fmt.Errorf("unmarshal config: %w", err)
 	}
 
